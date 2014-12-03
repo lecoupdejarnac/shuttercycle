@@ -1,4 +1,3 @@
-
 from __future__ import division
 
 import fileinput
@@ -18,22 +17,23 @@ CONFIG_PATH = SITE_ROOT + '/configs/'
 ERRORS_PATH = SITE_ROOT + '/errors/'
 PHOTOS_PATH = SITE_ROOT + '/media/photos/'
 NEW_ITEM_PATH = SITE_ROOT + '/new/'
+LOCKFILE = NEW_ITEM_PATH + '.lock'
 MAIN = '_main_/'
 HIDDEN = 'hidden/'
 GALLERY = 'gallery/'
 SHARE_PATH = 'Y:/shuttercycle_pics/'
 PROCESS_NAME = 'make_shuttercycle.exe'
-THUMB_PATH = PHOTOS_PATH + 'thumbs/'
-MEDIUM_PATH = PHOTOS_PATH + 'medium/'
-LARGE_PATH = PHOTOS_PATH + 'large/'
-BACKUP_PATH = PHOTOS_PATH + 'backup/'
+THUMB_EXT = 'THMB'
+MEDIUM_EXT = 'MED'
+LARGE_EXT = 'LG'
+BACKUP_EXT = 'BK'
 CONFIG_FILE = 'config.xml'
 JPEG_EXT = '.jpg'
-BACKUP_EXT = '.bkup'
+CONFIG_BACKUP_EXT = '.bkup'
 DEBUG_OUTPUT = True
-XLARGE_MAX_EXTENT = 2000
+XLARGE_MAX_EXTENT = 3500
 LARGE_MAX_EXTENT = 1200
-XMED_MAX_EXTENT = 1000
+XMED_MAX_EXTENT = 1200
 MED_MAX_EXTENT = 800
 THUMB_MAX_EXTENT = 130
 CAPTION_KEY = 'caption/abstract'
@@ -43,7 +43,11 @@ ISO_KEY = 'ISOSpeedRatings'
 FOCAL_KEY = 'FocalLength'
 SHUTTER_KEY = 'ExposureTime'
 APERTURE_KEY = 'FNumber'
+ADDED_FILES = NEW_ITEM_PATH + 'added_files.txt'
 
+added_file_paths = set()
+main_dom = None
+main_config_dirty = False
 
 fix_xml = re.compile(r'((?<=>)(\n[\t]*)(?=[^<\t]))|(?<=[^>\t])(\n[\t]*)(?=<)')
 fix_xml2 = re.compile('\s*$', re.MULTILINE)
@@ -110,16 +114,20 @@ def _get_extension(filename):
     return filename[filename.rfind('.'):]
 
 
+def _get_image_path(accession, current_folder, size):
+    return PHOTOS_PATH + current_folder + accession + "." + size + JPEG_EXT
+
+
 def _get_thumb_path(accession, current_folder):
-    return THUMB_PATH + current_folder + accession + JPEG_EXT
+    return _get_image_path(accession, current_folder, THUMB_EXT)
 
 
 def _get_medium_path(accession, current_folder):
-    return MEDIUM_PATH + current_folder + accession + JPEG_EXT
+    return _get_image_path(accession, current_folder, MEDIUM_EXT)
 
 
 def _get_large_path(accession, current_folder):
-    return LARGE_PATH + current_folder + accession + JPEG_EXT
+    return _get_image_path(accession, current_folder, LARGE_EXT)
 
 
 def _get_side_preserve_aspect(old_value, old_other_side, new_other_side):
@@ -200,26 +208,20 @@ def _get_new_size(img, max_extent):
         return (new_width, new_height)
 
 
+def _create_nonexistent_folder(path, folder):
+    if not os.path.isdir(path + folder):
+        os.mkdir(path + folder)
+        __debug('created folder %s' % path + folder)
+
+
 def _setup_image_folders(folder):
-    if not os.path.isdir(THUMB_PATH + folder):
-        os.mkdir(THUMB_PATH + folder)
-        __debug('created folder %s' % THUMB_PATH + folder)
-    if not os.path.isdir(MEDIUM_PATH + folder):
-        os.mkdir(MEDIUM_PATH + folder)
-        __debug('created folder %s' % MEDIUM_PATH + folder)
-    if not os.path.isdir(LARGE_PATH + folder):
-        os.mkdir(LARGE_PATH + folder)
-        __debug('created folder %s' % LARGE_PATH + folder)
-    if not os.path.isdir(SHARE_PATH + folder):
-        os.mkdir(SHARE_PATH + folder)
-        __debug('created folder %s' % SHARE_PATH + folder)
-    if not os.path.isdir(BACKUP_PATH + folder):
-        os.mkdir(BACKUP_PATH + folder)
-        __debug('created folder %s' % BACKUP_PATH + folder)
+    _create_nonexistent_folder(SHARE_PATH, folder)
 
 
 def _imagemagick_resize(source, dest, max_dimension):
-    cmd = 'convert "%s" -resize %dx%d "%s"' % (source, max_dimension, max_dimension, dest)
+    # renamed convert.exe to im_convert.exe on Win7 - it already has a 'convert' utility
+    #cmd = 'convert "%s" -resize %dx%d "%s"' % (source, max_dimension, max_dimension, dest)
+    cmd = 'im_convert "%s" -resize %dx%d "%s"' % (source, max_dimension, max_dimension, dest)
     print 'running {%s}' % cmd
     os.system(cmd)
 
@@ -229,13 +231,18 @@ def _is_image_xtra_large(source_location):
     width = img.size[0]
     height = img.size[1]
     if width > 6000 or height > 6000:
+        __debug('   (is extra large image CASE 1)')
         return True
-    if width + height > 9000:
-        return True
+#XXX for higher MP images, this will always return True
+#    if width + height > 9000:
+#        __debug('   (is extra large image CASE 2)')
+#        return True
 
     if width > height and width / height > 2.5:
+        __debug('   (is extra large image CASE 3)')
         return True
     elif height / width > 2.5:
+        __debug('   (is extra large image CASE 4)')
         return True
 
     return False
@@ -243,7 +250,6 @@ def _is_image_xtra_large(source_location):
 
 def _create_large_image(source_file, source_location, current_folder):
     large_path = _get_large_path(_get_accession(source_file), current_folder)
-#    shutil.copy(source_location, large_path)
     extent = LARGE_MAX_EXTENT
     if _is_image_xtra_large(source_location):
         extent = XLARGE_MAX_EXTENT
@@ -252,9 +258,7 @@ def _create_large_image(source_file, source_location, current_folder):
 
 
 def _create_med_image(source_file, source_location, current_folder):
-#    med = img.resize(_get_new_size(img, MED_MAX_EXTENT), Image.ANTIALIAS)
     med_path = _get_medium_path(_get_accession(source_file), current_folder)
-#    med.save(med_path, 'JPEG')
     extent = MED_MAX_EXTENT
     if _is_image_xtra_large(source_location):
         extent = XMED_MAX_EXTENT
@@ -273,12 +277,14 @@ def _do_create_sized_images(source_file, current_folder):
     result = True
     source_location = NEW_ITEM_PATH + current_folder + source_file
     thumb_path = _get_thumb_path(_get_accession(source_file), current_folder)
-    if os.path.isfile(thumb_path):
-        __debug('WARNING: %s will be REPLACED in all directories' % (current_folder + source_file))
+    scaled_dir = PHOTOS_PATH + current_folder
+    if not os.path.isdir(scaled_dir):
+        os.mkdir(scaled_dir)
+        __debug('created folder %s' % scaled_dir)
+    elif os.path.isfile(thumb_path):
+        __debug('WARNING: %s will be REPLACED' % (current_folder + source_file))
         shutil.copy(source_location, ERRORS_PATH + source_file)
         result = False
-#        os.rename(source_location, ERRORS_PATH + source_file)
-#        return False
 
     _create_large_image(source_file, source_location, current_folder)
 
@@ -294,14 +300,18 @@ def _copy_to_share_folder(new_path, image, folder):
 
 
 def _move_to_backup_folder(new_path, image, folder):
-    shutil.move(new_path, BACKUP_PATH + folder)
+    backup = PHOTOS_PATH + folder + _get_accession(image) + "." + BACKUP_EXT + JPEG_EXT
+    if os.path.isfile(backup):
+        os.remove(backup)
+    shutil.move(new_path, backup)
 
 
 def _create_sized_images(image, current_folder):
     result = _do_create_sized_images(image, current_folder)
     new_path = NEW_ITEM_PATH + current_folder + image 
     _copy_to_share_folder(new_path, image, current_folder)
-    _move_to_backup_folder(new_path, image, current_folder)
+#    _move_to_backup_folder(new_path, image, current_folder)
+    os.unlink(new_path)
     return result
 
 
@@ -353,53 +363,14 @@ def _append_folder_to_dom(folder_name, dom):
 
 
 def _write_dom_to_xml(dom, config_path):
-    shutil.copy(config_path, config_path + BACKUP_EXT)
+    shutil.copy(config_path, config_path + CONFIG_BACKUP_EXT)
     _delete_file(config_path)
     file = open(config_path, 'w')
     output = re.sub(fix_xml, '', dom.toprettyxml())
     output = re.sub(fix_xml2, '', output)
     file.write(output)
-#    dom.writexml(file, '   ', '   ', '\n')
     file.close()
     __debug('wrote xml %s' % config_path)
-
-
-#def _get_image_xml(name, metadata):
-#    caption = _get_image_caption(metadata)
-#    camera = _get_image_camera(metadata)
-#    lens = _get_image_lens(metadata)
-#    focal_length = _get_image_focal_length(metadata)
-#    iso = _get_image_iso(metadata)
-#    shutter_speed = _get_image_shutter_speed(metadata)
-#    aperture = _get_image_aperture(metadata)
-#
-#    xml = '   <file type="photo">\n'\
-#          '      <thumb>%s</thumb>\n'\
-#          '      <source size="medium">%s</source>\n'\
-#          '      <source size="large">%s</source>\n'\
-#          '      <description>%s</description>\n' % (name, name, name, caption)
-#
-#    if camera or lens or focal_length or iso or shutter_speed or aperture:
-#        xml += '      <meta>\n'\
-#               '         <camera>%s</camera>\n'\
-#               '         <lens>%s</lens>\n'\
-#               '         <focal_length>%s</focal_length>\n'\
-#               '         <iso>%s</iso>\n'\
-#               '         <shutter_speed>%s</shutter_speed>\n'\
-#               '         <aperture>%s</aperture>\n'\
-#               '      </meta>\n' % (camera, lens, focal_length, iso, shutter_speed, aperture)
-#
-#    xml += '   </file>' % (name, name, name, _get_image_caption(metadata))
-#    return xml
-#
-#
-#def _append_image_to_config(image, current_folder, metadata):
-#    finput = fileinput.FileInput(_get_config_file_path(current_folder), inplace=1)
-#
-#    for line in finput:
-#        if '</MultimediaGallery>' in line:
-#            line = _get_image_xml(image, metadata) + '\n' + line
-#        print line.rstrip()
 
 
 def _create_metadata(node, exif):
@@ -469,8 +440,6 @@ def _append_image_to_dom(image, exif, iptc, dom, config_images, current_folder):
 
 
 def _get_config_file_path(folder):
-    if folder == (GALLERY + MAIN):
-        return CONFIG_PATH + GALLERY + CONFIG_FILE
     return CONFIG_PATH + folder + CONFIG_FILE
 
 
@@ -506,22 +475,40 @@ def _get_config_images(dom):
 
 def _process_new_files(current_folder):
     items = os.listdir(NEW_ITEM_PATH + current_folder)
-    config_path = _get_config_file_path(current_folder)
-    dom = minidom.parse(config_path)
-    config_images = _get_config_images(dom)
+    if not items:
+        return
+
+    global main_dom
+    dom = None
+    config_path = ''
+    if current_folder == (GALLERY + MAIN):
+        config_path = CONFIG_PATH + GALLERY + CONFIG_FILE
+        dom = main_dom
+    else:
+        config_path = _get_config_file_path(current_folder)
+        dom = minidom.parse(config_path)
+
+    config_images = {}
+    if current_folder == GALLERY:
+        main_dom = dom
+    else:
+        config_images = _get_config_images(dom)
+
+    __debug('using config at %s' % config_path)
+    dirty_config = False
 
     for item in items:
         filepath = NEW_ITEM_PATH + current_folder + item
-        __debug('processing %s' % current_folder + '/' + item)
+        __debug('processing %s' % current_folder + item)
 
         if os.path.isfile(filepath) and _get_extension(item) == '.JPG':
-            os.rename(filepath, _get_extension(item) + JPEG_EXT);
+            os.rename(filepath, _get_accession(item) + JPEG_EXT);
 
         if os.path.isdir(filepath):
             if not os.path.isdir(CONFIG_PATH + current_folder + item) and\
             current_folder != HIDDEN:
-#                _append_folder_to_config(config_path, item)
                 _append_folder_to_dom(item, dom)
+                dirty_config = True
                 __debug('   added %s to %s config' % (item, config_path))
             _setup_configs(current_folder, item)
             _setup_image_folders(current_folder + item)
@@ -530,23 +517,52 @@ def _process_new_files(current_folder):
         elif os.path.isfile(filepath) and _get_extension(item) == JPEG_EXT:
             iptc = IPTCInfo(filepath)
             exif = get_exif(filepath)
-#            if _create_sized_images(item, current_folder):
-#               _append_image_to_config(item, current_folder, metadata)
             _create_sized_images(item, current_folder)
             _append_image_to_dom(item, exif, iptc, dom, config_images, current_folder)
+            dirty_config = True
+            added_file_paths.add(current_folder + item)
             __debug('DONE image')
 
-    _write_dom_to_xml(dom, config_path)
+    global main_config_dirty
+    if current_folder == (GALLERY + MAIN) and dirty_config:
+        main_config_dirty = True
+    elif dirty_config or (current_folder == GALLERY and main_config_dirty):
+        _write_dom_to_xml(dom, config_path)
+        added_file_paths.add(current_folder + CONFIG_FILE)
 
 
 def _is_already_running():
-    count = 0
-    c = wmi.WMI()
-    for process in c.Win32_Process(Name=PROCESS_NAME):
-        count += 1
-        if count > 1:
-            return True
-    return False
+    if not os.path.isfile(LOCKFILE):
+        open(LOCKFILE, 'w')
+        return False
+#    count = 0
+#    c = wmi.WMI()
+#    for process in c.Win32_Process(Name=PROCESS_NAME):
+#        count += 1
+#        if count > 1:
+#            return True
+    return True 
+
+
+def read_added_files(files):
+    if not os.path.isfile(ADDED_FILES):
+        return
+    file = open(ADDED_FILES, 'r')
+    for line in file:
+        files.add(line)
+    file.close()
+
+
+def write_added_files(files):
+    file = open(ADDED_FILES, 'w')
+    for added in files:
+        file.write(added + '\n')
+    file.close()
+
+
+def _output_added_files():
+    read_added_files(added_file_paths)
+    write_added_files(added_file_paths)
 
 
 def main():
@@ -554,6 +570,8 @@ def main():
         _setup_configs('', '')
         _process_new_files(GALLERY)
         _process_new_files(HIDDEN)
+        _output_added_files()
+        os.unlink(LOCKFILE)
         raw_input("DONE - Press ENTER.")
         return 0
 
