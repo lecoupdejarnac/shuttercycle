@@ -15,9 +15,12 @@ var g_currentFolder = '';
 var g_showMeta = false;
 var g_share = false;
 
-var THUMBROOT = 'media/photos/thumbs/';
-var MEDROOT = 'media/photos/medium/';
-var LARGEROOT = 'media/photos/large/';
+var THUMB = 'THMB'
+var MEDIUM = 'MED'
+var LARGE = 'LG'
+var IMAGE_ROOT = 'media/photos/'
+var CONFIG_ROOT = 'configs/';
+var CONFIG_FILE = 'config.json';
 var GALLERY = 'gallery/';
 var HIDDEN = 'hidden/';
 var MAIN = '_main_/';
@@ -33,19 +36,21 @@ var MMG = {
    * except the first one - it will load as much it fits in the window
    */
    data           : {
-      'loaded'             : 0,  
+      'loaded'             : 0,
       'total'              : 0,
       'folders'            : 0,
-      'set'             : 25
+      'set'                : 25
    },
+
    /**
-   * method called innitially: register events 
+   * method called innitially: register events
    * and starts the gallery
    */
    init : function () {
       MMG.initEventHandlers();
       MMG.start();
    },
+
    /**
    * init the events
    */
@@ -63,7 +68,7 @@ var MMG = {
       });
       $(window).bind('resize', function() {
          MMG.centerWrapper();
-         
+
          if(!$('#mmg_preview .preview_wrap').is(':empty')) {
             if($('#mmg_medium_photo').length > 0)
                MMG.resize($('#mmg_medium_photo'));
@@ -103,6 +108,7 @@ var MMG = {
          MMG.hidePreview();
       });
    },
+
    /**
    * Get URL variables (GET parameters)
    */
@@ -117,9 +123,11 @@ var MMG = {
       }
       return vars;
    },
+
    getUrlVar: function(name){
       return MMG.getUrlVars()[name];
    },
+
    /**
    * navigate to next image
    */
@@ -127,6 +135,7 @@ var MMG = {
       MMG.data.currentItem = MMG.data.currentItem+1;
       MMG.showItem();
    },
+
    /**
    * navigate to prev image
    */
@@ -134,13 +143,27 @@ var MMG = {
       MMG.data.currentItem = MMG.data.currentItem-1;
       MMG.showItem();
    },
+
    setRoot : function(folder) {
       g_root = folder + '/';
       g_currentFolder = g_root;
       document.title = 'shuttercycle | ' + folder;
    },
+
+   getConfigPath : function() {
+      config_location = g_share ? HIDDEN : GALLERY;
+      return CONFIG_ROOT + config_location + g_currentFolder + CONFIG_FILE;
+   },
+
+   getConfig : function(callback) {
+      var resp = $.get(MMG.getConfigPath(), function(data) {
+         var parsed = $.parseJSON(data);
+         callback(parsed)
+      });
+   },
+
    /**
-   * checks how many files we have
+   * counts how many gallery entries we have
    * draws the structure
    * displays the first set
    */
@@ -155,20 +178,23 @@ var MMG = {
          g_share = true;
       }
 
-      $.get('multimedia.class.php', {op:'getTotalFiles',folder:g_currentFolder,
-            share:(g_share ? '1' : '0')}, function(data) {
+      MMG.getConfig(function(data) {
+         MMG.data.total = 0;
+         for (var i = 0; i < data.length; ++i) {
+            if (data[i].hidden !== true) {
+                MMG.data.total++;
+            }
+         }
          MMG.data.loaded = 0;
          MMG.data.folders = 0;
-         MMG.data.total = (data * 1);
-         /**
-         * draws the containers where our thumbs will be displayed,
-         */
+         // draws the containers where our thumbs will be displayed,
          if (g_isReady) {
             var nmb_containers = MMG.countSpaces();
             MMG.draw(nmb_containers);
          }
-      },'text');
+      });
    },
+
    draw : function (nmb_containers) {
       /**
       * load innitially the number of items that fit
@@ -184,8 +210,9 @@ var MMG = {
       MMG.centerWrapper();
       MMG.display();
    },
+
    /**
-   * checks how many more thumbs we can display 
+   * checks how many more thumbs we can display
    * given the window dimentions
    */
    countSpaces : function () {
@@ -197,6 +224,7 @@ var MMG = {
       var nmb_containers_in_viewport = $('#mmg_media_wrapper li:in-viewport').length;
       return nmb_containers-nmb_containers_in_viewport;
    },
+
    /**
    * centers the thumbs grid
    */
@@ -219,6 +247,7 @@ var MMG = {
          });
       }
    },
+
    /**
    * displays the first set of files
    * we need to check how many we can display for our window size!
@@ -227,60 +256,65 @@ var MMG = {
       g_isReady = false;
       if (MMG.data.loaded == MMG.data.total)
          return;
-         
+
       var $list = $('#mmg_media_wrapper ul');
-      
+
       var nmb_toLoad = $list.find('li:empty').length;
       if (nmb_toLoad == 0) {
          g_isReady = true;
          return;
-      }  
-      $.get('multimedia.class.php', {op:'display',req:nmb_toLoad,cursor:MMG.data.loaded,
-                                     folder:g_currentFolder,share:(g_share ? '1' : '0')} , function(data) {
-         var res = JSON.parse(data);
-         if (res.length == 0)
-            g_isReady = true;
-         var load_state = {res_length: res.length, total_loaded: 0};
-         MMG.incrementLoadedFiles(res.length);
+      }
+
+      MMG.getConfig(function(data) {
+         var load_state = {res_length: nmb_toLoad, total_loaded: 0};
+         for (var i = MMG.data.loaded; i < MMG.data.loaded + nmb_toLoad; ++i) {
+            if (data[i].type == 'folder')
+               MMG.addFolder(data[i], load_state, $list);
+            else
+               MMG.addThumbnail(data[i], load_state, $list);
+         }
+
+         MMG.incrementLoadedFiles(nmb_toLoad);
          MMG.showOptionMore();
          MMG.showFolderBack();
-         for (var i = 0; i < res.length; ++i) {
-            if (res[i].type == 'folder')
-               MMG.addFolder(res[i], load_state, $list);
-            else
-               MMG.addThumbnail(res[i], load_state, $list);
-         }
-         
-      },'text');
-
+         g_isReady = true;
+      });
    },
-   getImageDir : function(root, isFolder) {
+
+   getImageName : function(filename, size) {
+      var a = filename.split('.');
+      var ext = a.pop();
+      a.push(size);
+      a.push(ext);
+      return a.join('.');
+   },
+
+   getImageDir : function(isFolder) {
       if (g_share)
-         return root + HIDDEN + g_currentFolder;
+         return IMAGE_ROOT + HIDDEN + g_currentFolder;
       if (g_currentFolder == '' && !isFolder)
-         return root + GALLERY + MAIN;
+         return IMAGE_ROOT + GALLERY + MAIN;
 
-      return root + GALLERY + g_currentFolder;
+      return IMAGE_ROOT + GALLERY + g_currentFolder;
    },
+
    /**
    * add a thumbnailed item to the grid display
    */
    addThumbnail : function(elem, load_state, $list) {
-      var elem_thumb = elem.thumb;
-      var elem_sources = elem.sources;
-      var elem_type = elem.type;
-      var elem_description = elem.description;
-      var elem_meta = elem.meta;
+      var elem_description = elem.description ? elem.description : ""
+      var elem_meta = elem.meta ? elem.meta : ""
 
       load_state.total_loaded += 1;
-      var $item = $('<a class="'+ elem_type + '" href="#" />');
+      var $item = $('<a class="'+ elem.type + '" href="#" />');
       //$item.append($('<img alt="' + elem_type + '"/>')
       $item.append($('<img/>')
          .load(function() {
             //MMG.resizeGridImage($(this), 140, 100);
-         }).attr('src', MMG.getImageDir(THUMBROOT) + elem_thumb)
-           .data('sources', elem_sources)
-           .data('type', elem_type)
+         }).attr('src', MMG.getImageDir() + MMG.getImageName(elem.img_thumb, THUMB))
+           .data('medium', elem.img_medium)
+           .data('large', elem.img_large)
+           .data('type', elem.type)
            .data('description', elem_description)
            .data('meta', elem_meta)
       );
@@ -295,53 +329,27 @@ var MMG = {
             MMG.showItem();
          }
       }
-
-/*
-      $('<img alt="'+elem_type+'"/>').load(function(){
-         var $this = $(this);
-         load_state.total_loaded += 1;
-         MMG.resizeGridImage($this, 140, 100);
-         var $elem = $('<a class="'+ $this.attr('alt') +'" href="#" />').append($this);
-         $list.find('li:empty:first').append($elem);
-         if (load_state.total_loaded == load_state.res_length) {
-            g_isReady = true;
-            // if the user was navigating through the items
-            // show the next one...
-            if (g_isPreviewing) {
-               g_isPreviewing = false;
-               MultimediaGallery.showItem();
-            }
-         }
-      }).attr('src', THUMBROOT + g_currentFolder + elem_thumb)
-         .data('sources', elem_sources)
-         .data('type', elem_type)
-         .data('description', elem_description)
-         .data('meta', elem_meta); */
    },
+
    /**
    * add a folder to the grid display
    */
    addFolder : function(elem, load_state, $list) {
-      var elem_thumb = elem.thumb;
-      var elem_sources = elem.sources;
-      var elem_type = elem.type;
-      var elem_description = elem.description;
-      var path = elem_sources[0].source;
-
       load_state.total_loaded += 1;
-      var $item = $('<a class="folder"><div class="name">' + elem_description + '</div></a>');
+      var $item = $('<a class="folder"><div class="name">' + elem.description + '</div></a>');
       $item.hide();
-      $item.append($('<img alt="' + elem_type + '"/>')
+      $item.append($('<img alt="' + elem.type + '"/>')
          .load(function() {
             MMG.resizeGridImage($(this), 110, 80);
             $item.show();
-         }).attr('src', MMG.getImageDir(THUMBROOT, true) + path + '/' + elem_thumb)
+         }).attr('src', MMG.getImageDir(true) + elem.source + '/' + MMG.getImageName(elem.img_thumb, THUMB))
       );
       $list.find('li:empty:first').append($item).click(function() {
-         MMG.clickFolder(elem_sources[0].source);
+         MMG.clickFolder(elem.source);
       });
       MMG.data.folders += 1;
    },
+
    /**
    * execute when a folder is clicked
    */
@@ -352,6 +360,7 @@ var MMG = {
       g_isReady = true;
       MMG.start();
    },
+
    /**
    * execute when the folder back button is clicked
    */
@@ -364,6 +373,7 @@ var MMG = {
       g_currentFolder = '';
       MMG.clickFolder(previous);
    },
+
    /**
    * shows the button to go back a folder level
    */
@@ -373,6 +383,7 @@ var MMG = {
       else
          $('#mmg_prev_folder .prevfolder').hide();
    },
+
    /**
    * shows the button "more" if there are more items
    */
@@ -382,12 +393,14 @@ var MMG = {
       else
          $('#mmg_media_wrapper .more').show();
    },
+
    /**
    * increments the amount of loaded files
    */
    incrementLoadedFiles : function (newfiles) {
       MMG.data.loaded += newfiles;
    },
+
    /**
    * user clicks on more button
    */
@@ -396,8 +409,9 @@ var MMG = {
          var nmb_containers = Math.min(MMG.data.total-MMG.data.loaded,
                                        MMG.data.set)
          MMG.draw(nmb_containers);
-      }              
+      }
    },
+
    /**
    * show the medium-sized image preview
    */
@@ -431,6 +445,7 @@ var MMG = {
                e.preventDefault();
             });
    },
+
    /**
    * display the next/prev item arrows
    */
@@ -445,12 +460,13 @@ var MMG = {
       else
          $('#mmg_next').show();
    },
+
    /**
    * displays the item when user clicks on thumb (photo,video or audio)
    */
    showItem : function() {
       if (MMG.data.currentItem < 1) return;
-      
+
       $('#mmg_overlay,#mmg_preview').show();
       var $preview_wrap = $('#mmg_preview .preview_wrap');
 
@@ -464,32 +480,26 @@ var MMG = {
             MMG.data.currentItem = MMG.data.currentItem-1;
             return;
          }
-         
+
          MMG.more();
          g_isPreviewing = true;
          return;
       }
-      $('#mmg_preview_loading').show();   
+      $('#mmg_preview_loading').show();
       $('#mmg_prev_folder .prevfolder').hide();
       /**
       * photo, video or audio
       */
       var item_type = $item.data('type');
-      var item_sources = $item.data('sources');
       var item_description = $item.data('description');
       var item_meta = $item.data('meta');
+      var item_large = $item.data('large');
+      var item_medium = $item.data('medium');
+      var item_sources = $item.data('sources');
       switch (item_type) {
          case 'photo':
-            var large;
-            var medium;
-            if (item_sources[0].size == 'large') {
-               large = MMG.getImageDir(LARGEROOT) + item_sources[0].source;
-               medium = MMG.getImageDir(MEDROOT) + item_sources[1].source;
-            }
-            else {
-               large = MMG.getImageDir(LARGEROOT) + item_sources[1].source;
-               medium = MMG.getImageDir(MEDROOT) + item_sources[0].source;
-            }
+            var large = MMG.getImageDir() + MMG.getImageName(item_large, LARGE);
+            var medium = MMG.getImageDir() + MMG.getImageName(item_medium, MEDIUM);
 
             MMG.data.mediumImage = medium;
             MMG.data.largeImage = large;
@@ -509,7 +519,7 @@ var MMG = {
                $sources       += '<source src="'+theSource+'" type="'+ item_type +'/'+ format +'"/>';
             }
             var $audio = '<audio controls="controls">'+$sources+'</audio>';
-            
+
             $preview_wrap.fadeOut(100,function(){
                $('#mmg_preview_loading').hide();
                $(this).empty().append('<a href="#" id="mmg_item_close" class="close"></a>').append($mediawrapper.html($.fixHTML5($audio))).fadeIn();
@@ -525,7 +535,7 @@ var MMG = {
             var $mediawrapper = $('<div />',{
                className   : 'media-player _video'
             });
-            
+
             var sources_length = item_sources.length;
             var $sources = '';
             for(var i = 0; i < sources_length; ++i){
@@ -533,7 +543,7 @@ var MMG = {
                $sources += '<source src="'+theSource+'"/>';
             }
             var $video = '<video controls="controls" preload="none">'+$sources+'<div class="fallback"><div class="fallback-text"><p>Please use a modern browser or install <a href="http://www.videolan.org/">VLC (check Mozilla Plugin)</a> or <a href="http://get.adobe.com/flashplayer/">Flash-Plugin</a></p></div></div>'+'</video>';
-            
+
             $preview_wrap.fadeOut(100,function(){
                $('#mmg_preview_loading').hide();
                $(this).empty().append('<a href="#" id="mmg_item_close" class="close"></a>').append($mediawrapper.html($.fixHTML5($video))).fadeIn();
@@ -552,19 +562,21 @@ var MMG = {
                var videoH  = 240;
                MMG.centerPreview(videoW,videoH);
             });
-            break;   
+            break;
       }
    },
+
    /**
    * adds a description when there is one
    */
    changeDescription : function (item_description) {
       if (item_description == '' || item_description == 'None')
          $('#mmg_description').hide();
-      else  
+      else
          $('#mmg_description').empty().html('<p>' +
                MMG.truncateText(item_description, DESC_MAX_LENGTH) + '</p>').show();
    },
+
    /**
    * update the metadata display (EXIF)
    */
@@ -583,6 +595,7 @@ var MMG = {
       $('#mmg_meta .meta_wrap').append(out);
       $('#mmg_meta').show();
    },
+
    /**
    * add the key-value pair to the metadata display
    */
@@ -595,6 +608,7 @@ var MMG = {
          out += '<td class="meta_values">N/A</td></tr>';
       return out;
    },
+
    /**
    * add the key-value pair to the metadata display
    */
@@ -616,6 +630,7 @@ var MMG = {
 
       return use_two_lines;
    },
+
    /**
    * user clicks on the cross to close the item
    */
@@ -624,6 +639,7 @@ var MMG = {
          return text;
       return text.substr(0, limit - 3) + '...';
    },
+
    /**
    * user clicks on the cross to close the item
    */
@@ -635,6 +651,7 @@ var MMG = {
       $preview_wrap.removeAttr('style');
       MMG.showFolderBack();
    },
+
    /**
    * auto-scroll the large image based on mouse movement
    */
@@ -652,6 +669,7 @@ var MMG = {
          }
       );
    },
+
    /**
    * user clicks on the square to enlarge the item
    */
@@ -696,6 +714,7 @@ var MMG = {
       MMG.bindHitbox('#mmg_large .large_hitbox_bl', -10, 10);
       MMG.bindHitbox('#mmg_large .large_hitbox_br', 10, 10);
    },
+
    /**
    * user clicks on the 'i' to show item info (EXIF)
    */
@@ -710,6 +729,7 @@ var MMG = {
 
       g_showMeta = !g_showMeta;
    },
+
    /**
    * Scroll the large image on a timed interval
    */
@@ -723,6 +743,7 @@ var MMG = {
          $(document).scrollLeft(newLeft);
       }
    },
+
    /**
    * Move the large image based on mouse movements
    */
@@ -732,6 +753,7 @@ var MMG = {
             MMG.moveOnInterval();
          }, 25);
    },
+
    /**
    * Stop moving the large image
    */
@@ -743,6 +765,7 @@ var MMG = {
          delete MMG.data.scrollInterval;
       }
    },
+
    /**
    * user clicks on the large image to close it
    */
@@ -765,13 +788,14 @@ var MMG = {
       })
       .unbind('click');
    },
+
    /**
    * resize the image (medium image), based on windows width and height
    */
    resize : function ($image){
       var widthMargin = 10
       var heightMargin = 120;
-      
+
       var windowH = $(window).height()-heightMargin;
       var windowW = $(window).width()-widthMargin;
       var theImage = new Image();
@@ -815,6 +839,7 @@ var MMG = {
       });
       MMG.centerPreview(theImage.width,theImage.height);
    },
+
    /**
    * center the large image / video / audio on the page
    */
@@ -833,6 +858,7 @@ var MMG = {
          'margin-left':-(width/2)-30+'px'
       });
    },
+
    /**
    * resize each thumb image in the grid view
    */
@@ -841,7 +867,7 @@ var MMG = {
       theImage.src   = $image.attr("src");
       var imgwidth   = theImage.width;
       var imgheight  = theImage.height;
-      
+
       if(imgwidth > containerwidth){
          var newwidth = containerwidth;
          var ratio = imgwidth / containerwidth;
