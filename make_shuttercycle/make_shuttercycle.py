@@ -1,12 +1,12 @@
 from __future__ import division
 
+import json
 import fileinput
 import os.path
 import re
 import shutil
 import sys
 import wmi
-import xml.dom.minidom as minidom
 
 from iptcinfo import IPTCInfo
 from PIL import Image
@@ -27,7 +27,8 @@ THUMB_EXT = 'THMB'
 MEDIUM_EXT = 'MED'
 LARGE_EXT = 'LG'
 BACKUP_EXT = 'BK'
-CONFIG_FILE = 'config.xml'
+CONFIG_FILE = 'config.json'
+MAIN_GALLERY_CONFIG_PATH = CONFIG_PATH + GALLERY + CONFIG_FILE
 JPEG_EXT = '.jpg'
 CONFIG_BACKUP_EXT = '.bkup'
 DEBUG_OUTPUT = True
@@ -46,42 +47,16 @@ APERTURE_KEY = 'FNumber'
 ADDED_FILES = NEW_ITEM_PATH + 'added_files.txt'
 
 added_file_paths = set()
-main_dom = None
-main_config_dirty = False
 
-fix_xml = re.compile(r'((?<=>)(\n[\t]*)(?=[^<\t]))|(?<=[^>\t])(\n[\t]*)(?=<)')
-fix_xml2 = re.compile('\s*$', re.MULTILINE)
 
-# courtesy: http://ronrothman.com/public/leftbraned/xml-dom-minidom-toprettyxml-and-silly-whitespace/
-def fixed_writexml(self, writer, indent="", addindent="", newl=""):
-    # indent = current indentation
-    # addindent = indentation to add to higher levels
-    # newl = newline string
-    writer.write(indent+"<" + self.tagName)
+def _load_config(config_path):
+    file = open(config_path, 'r')
+    result = json.load(file)
+    file.close()
+    return result
 
-    attrs = self._get_attributes()
-    a_names = attrs.keys()
-    a_names.sort()
 
-    for a_name in a_names:
-        writer.write(" %s=\"" % a_name)
-        minidom._write_data(writer, attrs[a_name].value)
-        writer.write("\"")
-    if self.childNodes:
-        if len(self.childNodes) == 1 \
-          and self.childNodes[0].nodeType == minidom.Node.TEXT_NODE:
-            writer.write(">")
-            self.childNodes[0].writexml(writer, "", "", "")
-            writer.write("</%s>%s" % (self.tagName, newl))
-            return
-        writer.write(">%s"%(newl))
-        for node in self.childNodes:
-            node.writexml(writer,indent+addindent,addindent,newl)
-        writer.write("%s</%s>%s" % (indent,self.tagName,newl))
-    else:
-        writer.write("/>%s"%(newl))
-# replace minidom's function with ours
-minidom.Element.writexml = fixed_writexml
+main_config = _load_config(MAIN_GALLERY_CONFIG_PATH)
 
 
 # courtesy: http://www.blog.pythonlibrary.org/2010/03/28/getting-photo-metadata-exif-using-python/
@@ -203,7 +178,7 @@ def _get_new_size(img, max_extent):
         new_height = _get_side_preserve_aspect(height, width, new_width)
         return (new_width, new_height)
     else:
-        new_height = max_extent 
+        new_height = max_extent
         new_width = _get_side_preserve_aspect(width, height, new_height)
         return (new_width, new_height)
 
@@ -332,45 +307,24 @@ def _append_folder_to_config(config_file, folder_name):
         print line.rstrip()
 
 
-def _append_child_tag(node, tag, value, attr=None, attr_val=None):
-    text = minidom.Text()
-    text.data = value
-    child = minidom.Element(tag)
-    child.appendChild(text)
-
-    if attr:
-        child.setAttribute(attr, attr_val)
-        
-    node.appendChild(child)
-
-
-def _get_gallery_element(dom):
-    return dom.getElementsByTagName('MultimediaGallery')[0]
+def _add_folder_to_config(folder_name, config):
+    node = {\
+        'type': 'folder',\
+        'thumb': '',\
+        'source': folder_name,\
+        'description': folder_name\
+    }
+    # prepend new folders to the config
+    config.insert(0, node)
 
 
-def _append_folder_to_dom(folder_name, dom):
-    node = minidom.Element('file')
-    node.setAttribute('type', 'folder')
-
-    _append_child_tag(node, 'thumb', '')
-    _append_child_tag(node, 'source', folder_name)
-    _append_child_tag(node, 'description', folder_name)
-
-    if _get_gallery_element(dom).firstChild:
-        _get_gallery_element(dom).insertBefore(node, _get_gallery_element(dom).firstChild)
-    else:
-        _get_gallery_element(dom).appendChild(node)
-
-
-def _write_dom_to_xml(dom, config_path):
+def _write_config(config, config_path):
     shutil.copy(config_path, config_path + CONFIG_BACKUP_EXT)
     _delete_file(config_path)
     file = open(config_path, 'w')
-    output = re.sub(fix_xml, '', dom.toprettyxml())
-    output = re.sub(fix_xml2, '', output)
-    file.write(output)
+    json.dump(config, file, sort_keys=True, indent=4, separators=(',', ': '))
     file.close()
-    __debug('wrote xml %s' % config_path)
+    __debug('wrote config %s' % config_path)
 
 
 def _create_metadata(node, exif):
@@ -382,61 +336,67 @@ def _create_metadata(node, exif):
     aperture = _get_image_aperture(exif)
 
     if not (camera or lens or focal_length or iso or shutter_speed or aperture):
-        return
+        return None
 
-    meta = minidom.Element('meta')
-    _append_child_tag(meta, 'camera', camera)
-    _append_child_tag(meta, 'lens', lens)
-    _append_child_tag(meta, 'focal_length', focal_length)
-    _append_child_tag(meta, 'iso', iso)
-    _append_child_tag(meta, 'shutter_speed', shutter_speed)
-    _append_child_tag(meta, 'aperture', aperture)
+    meta = {}
+    if camera: meta['camera'] = camera
+    if lens: meta['lens'] = lens
+    if focal_length: meta['lens'] = lens
+    if iso: meta['iso'] = iso
+    if shutter_speed: meta['shutter_speed'] = shutter_speed
+    if aperture: meta['aperture'] = aperture
     return meta
 
 
 def _replace_meta(oldData, newData, name):
-    items = oldData.getElementsByTagName(name)
-    if not items:
-        return
-
-    if items[0].getAttribute('locked'):
-        newData.replaceChild(items[0], newData.getElementsByTagName(name)[0])
+    for key, value in newData:
+        oldData[key] = value
 
 
-def _finalize_metadata(newMeta, oldMeta):
+def _merge_metadata(newMeta, oldMeta):
     if not oldMeta:
-        return
+        return newMeta
 
-    oldData = oldMeta[0]
-    _replace_meta(oldData, newMeta, 'camera')
-    _replace_meta(oldData, newMeta, 'lens')
-    _replace_meta(oldData, newMeta, 'focal_length')
-    _replace_meta(oldData, newMeta, 'iso')
-    _replace_meta(oldData, newMeta, 'shutter_speed')
-    _replace_meta(oldData, newMeta, 'aperture')
+    if not newMeta
+        return oldMeta
+
+    _replace_meta(oldMeta, newMeta, 'camera')
+    _replace_meta(oldMeta, newMeta, 'lens')
+    _replace_meta(oldMeta, newMeta, 'focal_length')
+    _replace_meta(oldMeta, newMeta, 'iso')
+    _replace_meta(oldMeta, newMeta, 'shutter_speed')
+    _replace_meta(oldMeta, newMeta, 'aperture')
+    return oldMeta
 
 
-def _append_image_to_dom(image, exif, iptc, dom, config_images, current_folder):
-    node = minidom.Element('file')
-    node.setAttribute('type', 'photo')
+def _add_image_to_config(image, exif, iptc, config, config_images, current_folder):
+    node = {\
+        'type': 'photo',\
+        'img_thumb': image,\
+        'img_medium': image,\
+        'img_large': image\
+    }
 
-    _append_child_tag(node, 'thumb', image)
-    _append_child_tag(node, 'source', image, 'size', 'medium')
-    _append_child_tag(node, 'source', image, 'size', 'large')
-    _append_child_tag(node, 'description', _get_image_caption(iptc))
-    metaNode = _create_metadata(node, exif)
+    description = _get_image_caption(iptc)
+    if description: node['description'] = description
 
+    index = len(config)
+    meta = _create_metadata(exif)
     if image in config_images:
-        _finalize_metadata(metaNode, config_images[image].getElementsByTagName('meta'))
-        node.appendChild(metaNode)
-        _get_gallery_element(dom).replaceChild(node, config_images[image])
-        config_images[image].getElementsByTagName('description')
+        existing = config_images[image]
+        meta = _merge_metadata(meta, existing['meta'])
+        if meta: node['meta'] = meta
+
+        index = existing['index']
+        config[index] = node
         __debug('   replaced %s in %s config' % (image, current_folder))
     else:
-        node.appendChild(metaNode)
-        _get_gallery_element(dom).appendChild(node)
+        if meta: node['meta'] = meta
+        config.append(node)
         __debug('   added %s to %s config' % (image, current_folder))
-    config_images[image] = node
+    copy = dict(node)
+    copy['index'] = index
+    config_images[image] = copy
 
 
 def _get_config_file_path(folder):
@@ -452,24 +412,25 @@ def _setup_configs(current_folder, new):
     config_file = folder + '/' + CONFIG_FILE
     if not os.path.isfile(config_file):
         file = open(config_file, 'w')
-        file.write('<?xml version="1.0"?>\n<MultimediaGallery>\n</MultimediaGallery>')
+        file.write('[]')
         file.close()
         __debug('created file %s' % config_file)
-    
+
 
 def _delete_file(path):
     os.remove(path)
     __debug('deleted file %s' % path)
 
 
-def _get_config_images(dom):
+def _get_config_images(config):
     config_images = {}
-    files = dom.getElementsByTagName('file')
-    for file in files:
-        if file.getAttribute('type') == 'photo':
-            thumbs = file.getElementsByTagName('thumb')
-            if thumbs and thumbs[0].firstChild:
-                config_images[thumbs[0].firstChild.data] = file
+    for i in range(0, len(config)):
+        entry = config[i]
+        if entry['type'] == 'photo':
+            copy = dict(entry)
+            copy['index'] = i
+            config_images[entry['thumb']] = copy
+
     return config_images
 
 
@@ -478,21 +439,18 @@ def _process_new_files(current_folder):
     if not items:
         return
 
-    global main_dom
-    dom = None
+    config = None
     config_path = ''
     if current_folder == (GALLERY + MAIN):
-        config_path = CONFIG_PATH + GALLERY + CONFIG_FILE
-        dom = main_dom
+        config_path = MAIN_GALLERY_CONFIG_PATH
+        config = main_config
     else:
         config_path = _get_config_file_path(current_folder)
-        dom = minidom.parse(config_path)
+        config = _load_config(config_path)
 
-    config_images = {}
-    if current_folder == GALLERY:
-        main_dom = dom
-    else:
-        config_images = _get_config_images(dom)
+    # skip the GALLERY folder, because its images are really in GALLERY+MAIN
+    if current_folder != GALLERY:
+        config_images = _get_config_images(config)
 
     __debug('using config at %s' % config_path)
     dirty_config = False
@@ -507,7 +465,7 @@ def _process_new_files(current_folder):
         if os.path.isdir(filepath):
             if not os.path.isdir(CONFIG_PATH + current_folder + item) and\
             current_folder != HIDDEN:
-                _append_folder_to_dom(item, dom)
+                _add_folder_to_config(item, config)
                 dirty_config = True
                 __debug('   added %s to %s config' % (item, config_path))
             _setup_configs(current_folder, item)
@@ -518,21 +476,26 @@ def _process_new_files(current_folder):
             iptc = IPTCInfo(filepath)
             exif = get_exif(filepath)
             _create_sized_images(item, current_folder)
-            _append_image_to_dom(item, exif, iptc, dom, config_images, current_folder)
+            _add_image_to_config(item, exif, iptc, config, config_images, current_folder)
             dirty_config = True
             added_file_paths.add(current_folder + item)
             __debug('DONE image')
 
-    global main_config_dirty
-    if current_folder == (GALLERY + MAIN) and dirty_config:
-        main_config_dirty = True
-    elif dirty_config or (current_folder == GALLERY and main_config_dirty):
-        _write_dom_to_xml(dom, config_path)
+    if dirty_config:
+        _write_config(config, config_path)
         added_file_paths.add(current_folder + CONFIG_FILE)
+
+#    global main_config_dirty
+#    if current_folder == (GALLERY + MAIN) and dirty_config:
+#        main_config_dirty = True
+#    elif dirty_config or (current_folder == GALLERY and main_config_dirty):
+#        _write_dom_to_xml(config, config_path)
+#        added_file_paths.add(current_folder + CONFIG_FILE)
 
 
 def _is_already_running():
     if not os.path.isfile(LOCKFILE):
+        #XXX this is prone to races: multiple procs can get here at the same time!
         open(LOCKFILE, 'w')
         return False
 #    count = 0
@@ -541,7 +504,7 @@ def _is_already_running():
 #        count += 1
 #        if count > 1:
 #            return True
-    return True 
+    return True
 
 
 def read_added_files(files):
