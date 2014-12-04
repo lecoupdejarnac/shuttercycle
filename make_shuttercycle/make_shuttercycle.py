@@ -14,21 +14,27 @@ from PIL.ExifTags import TAGS
 SITE_ROOT = ''
 SHARE_PATH = ''
 CONVERT_CMD = ''
+TMP_PATH = os.getcwd() + '/tmp'
 if sys.platform == 'win32':
     SHARE_PATH = 'Y:/shuttercycle_pics/'
     SITE_ROOT = 'Z:/www'
-    CONVERT_CMD = 'im_convert'
+    # uses imagemagic's convert utility
+    # renamed convert.exe to im_convert.exe on Win7 - it already has a 'convert' utility
+    #CONVERT_CMD = 'convert "%s" -resize %dx%d "%s"'
+    CONVERT_CMD = 'im_convert "%s" -resize %dx%d "%s"'
 elif sys.platform == 'darwin':
     SITE_ROOT = '/Volumes/storage/www'
     SHARE_PATH = '/Volumes/share/shuttercycle_pics/'
-    CONVERT_CMD = 'convert'
+    # uses vipsthumbnail (part of libvips)
+    # faster and imagemagick gave unsharp results on mac
+    CONVERT_CMD = 'vipsthumbnail "%s" -s %dx%d -o "%s"'
 else:
     raise Exception("Unsupported platform")
 
 CONFIG_PATH = SITE_ROOT + '/configs/'
 ERRORS_PATH = SITE_ROOT + '/errors/'
 PHOTOS_PATH = SITE_ROOT + '/media/photos/'
-NEW_ITEM_PATH = SITE_ROOT + '/new/'
+NEW_ITEM_PATH = TMP_PATH + '/new/'
 LOCKFILE = NEW_ITEM_PATH + '.lock'
 MAIN = '_main_/'
 HIDDEN = 'hidden/'
@@ -106,14 +112,6 @@ def _get_image_path(accession, current_folder, size):
 
 def _get_thumb_path(accession, current_folder):
     return _get_image_path(accession, current_folder, THUMB_EXT)
-
-
-def _get_medium_path(accession, current_folder):
-    return _get_image_path(accession, current_folder, MEDIUM_EXT)
-
-
-def _get_large_path(accession, current_folder):
-    return _get_image_path(accession, current_folder, LARGE_EXT)
 
 
 def _get_side_preserve_aspect(old_value, old_other_side, new_other_side):
@@ -204,12 +202,14 @@ def _setup_image_folders(folder):
     _create_nonexistent_folder(SHARE_PATH, folder)
 
 
-def _imagemagick_resize(source, dest, max_dimension):
+def _imagemagick_resize(source, dest_path, dest_filename, max_dimension):
+    tmp_path = TMP_PATH + "/" + dest_filename
     # renamed convert.exe to im_convert.exe on Win7 - it already has a 'convert' utility
     #cmd = 'convert "%s" -resize %dx%d "%s"' % (source, max_dimension, max_dimension, dest)
-    cmd = '%s "%s" -resize %dx%d "%s"' % (CONVERT_CMD, source, max_dimension, max_dimension, dest)
+    cmd = CONVERT_CMD % (source, max_dimension, max_dimension, tmp_path)
     print 'running {%s}' % cmd
     os.system(cmd)
+    _move_to_photo_folder(tmp_path, dest_path)
 
 
 def _is_image_xtra_large(source_location):
@@ -235,21 +235,25 @@ def _is_image_xtra_large(source_location):
 
 
 def _create_large_image(source_file, source_location, current_folder):
-    large_path = _get_large_path(_get_accession(source_file), current_folder)
+    accession = _get_accession(source_file)
+    dest_path = _get_image_path(accession, current_folder, LARGE_EXT)
+    large_filename = accession  + '.' + LARGE_EXT + JPEG_EXT
     extent = LARGE_MAX_EXTENT
     if _is_image_xtra_large(source_location):
         extent = XLARGE_MAX_EXTENT
-    _imagemagick_resize(source_location, large_path, extent)
-    __debug('large: %s' % large_path)
+    _imagemagick_resize(source_location, dest_path, large_filename, extent)
+    __debug('large: %s' % dest_path)
 
 
 def _create_med_image(source_file, source_location, current_folder):
-    med_path = _get_medium_path(_get_accession(source_file), current_folder)
+    accession = _get_accession(source_file)
+    dest_path = _get_image_path(accession, current_folder, MEDIUM_EXT)
+    med_filename = accession  + '.' + MEDIUM_EXT + JPEG_EXT
     extent = MED_MAX_EXTENT
     if _is_image_xtra_large(source_location):
         extent = XMED_MAX_EXTENT
-    _imagemagick_resize(source_location, med_path, extent)
-    __debug('med: %s' % med_path)
+    _imagemagick_resize(source_location, dest_path, med_filename, extent)
+    __debug('med: %s' % dest_path)
 
 
 def _create_thumbnail(source_location, thumb_path):
@@ -283,6 +287,11 @@ def _do_create_sized_images(source_file, current_folder):
 
 def _copy_to_share_folder(new_path, image, folder):
     shutil.copy(new_path, SHARE_PATH + folder + image)
+
+
+def _move_to_photo_folder(tmp_path, dest_path):
+    __debug('moving from "%s" to "%s"' % (tmp_path, dest_path))
+    shutil.move(tmp_path, dest_path)
 
 
 def _move_to_backup_folder(new_path, image, folder):
@@ -343,7 +352,7 @@ def _create_metadata(exif):
 
 
 def _replace_meta(oldData, newData, name):
-    for key, value in newData:
+    for key, value in newData.items():
         oldData[key] = value
 
 
@@ -478,13 +487,6 @@ def _process_new_files(current_folder):
     if dirty_config:
         _write_config(config, config_path)
         added_file_paths.add(current_folder + CONFIG_FILE)
-
-#    global main_config_dirty
-#    if current_folder == (GALLERY + MAIN) and dirty_config:
-#        main_config_dirty = True
-#    elif dirty_config or (current_folder == GALLERY and main_config_dirty):
-#        _write_dom_to_xml(config, config_path)
-#        added_file_paths.add(current_folder + CONFIG_FILE)
 
 
 def _is_already_running():
