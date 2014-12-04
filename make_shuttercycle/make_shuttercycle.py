@@ -6,13 +6,25 @@ import os.path
 import re
 import shutil
 import sys
-import wmi
 
 from iptcinfo import IPTCInfo
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-SITE_ROOT = 'Z:/www'
+SITE_ROOT = ''
+SHARE_PATH = ''
+CONVERT_CMD = ''
+if sys.platform == 'win32':
+    SHARE_PATH = 'Y:/shuttercycle_pics/'
+    SITE_ROOT = 'Z:/www'
+    CONVERT_CMD = 'im_convert'
+elif sys.platform == 'darwin':
+    SITE_ROOT = '/Volumes/storage/www'
+    SHARE_PATH = '/Volumes/share/shuttercycle_pics/'
+    CONVERT_CMD = 'convert'
+else:
+    raise Exception("Unsupported platform")
+
 CONFIG_PATH = SITE_ROOT + '/configs/'
 ERRORS_PATH = SITE_ROOT + '/errors/'
 PHOTOS_PATH = SITE_ROOT + '/media/photos/'
@@ -21,7 +33,6 @@ LOCKFILE = NEW_ITEM_PATH + '.lock'
 MAIN = '_main_/'
 HIDDEN = 'hidden/'
 GALLERY = 'gallery/'
-SHARE_PATH = 'Y:/shuttercycle_pics/'
 PROCESS_NAME = 'make_shuttercycle.exe'
 THUMB_EXT = 'THMB'
 MEDIUM_EXT = 'MED'
@@ -196,7 +207,7 @@ def _setup_image_folders(folder):
 def _imagemagick_resize(source, dest, max_dimension):
     # renamed convert.exe to im_convert.exe on Win7 - it already has a 'convert' utility
     #cmd = 'convert "%s" -resize %dx%d "%s"' % (source, max_dimension, max_dimension, dest)
-    cmd = 'im_convert "%s" -resize %dx%d "%s"' % (source, max_dimension, max_dimension, dest)
+    cmd = '%s "%s" -resize %dx%d "%s"' % (CONVERT_CMD, source, max_dimension, max_dimension, dest)
     print 'running {%s}' % cmd
     os.system(cmd)
 
@@ -293,7 +304,7 @@ def _create_sized_images(image, current_folder):
 def _add_folder_to_config(folder_name, config):
     node = {\
         'type': 'folder',\
-        'thumb': '',\
+        'img_thumb': '',\
         'source': folder_name,\
         'description': folder_name\
     }
@@ -310,7 +321,7 @@ def _write_config(config, config_path):
     __debug('wrote config %s' % config_path)
 
 
-def _create_metadata(node, exif):
+def _create_metadata(exif):
     camera = _get_image_camera(exif)
     lens = _get_image_lens(exif)
     focal_length = _get_image_focal_length(exif)
@@ -340,7 +351,7 @@ def _merge_metadata(newMeta, oldMeta):
     if not oldMeta:
         return newMeta
 
-    if not newMeta
+    if not newMeta:
         return oldMeta
 
     _replace_meta(oldMeta, newMeta, 'camera')
@@ -412,7 +423,7 @@ def _get_config_images(config):
         if entry['type'] == 'photo':
             copy = dict(entry)
             copy['index'] = i
-            config_images[entry['thumb']] = copy
+            config_images[entry['img_thumb']] = copy
 
     return config_images
 
