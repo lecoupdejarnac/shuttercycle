@@ -290,23 +290,6 @@ def _create_sized_images(image, current_folder):
     return result
 
 
-def _get_folder_xml(name):
-    return '   <file type="folder">\n'\
-           '      <thumb></thumb>\n'\
-           '      <source>%s</source>\n'\
-           '      <description>%s</description>\n'\
-           '   </file>' % (name, name)
-
-
-def _append_folder_to_config(config_file, folder_name):
-    finput = fileinput.FileInput(config_file, inplace=1)
-
-    for line in finput:
-        if '<MultimediaGallery>' in line:
-            line = line + _get_folder_xml(folder_name)
-        print line.rstrip()
-
-
 def _add_folder_to_config(folder_name, config):
     node = {\
         'type': 'folder',\
