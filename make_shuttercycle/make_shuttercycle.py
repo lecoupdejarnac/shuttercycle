@@ -27,7 +27,8 @@ elif sys.platform == 'darwin':
     SHARE_PATH = '/Volumes/share/shuttercycle_pics/'
     # uses vipsthumbnail (part of libvips)
     # faster and imagemagick gave unsharp results on mac
-    CONVERT_CMD = 'vipsthumbnail "%s" -s %dx%d -o "%s"'
+    # use -p option to set interpolator: good options are [bilinear, bicubic, lbb, nohalo]
+    CONVERT_CMD = 'vipsthumbnail "%s" -s %dx%d -o "%s[no_subsample]" --interpolator=nohalo --sharpen=none'
 else:
     raise Exception("Unsupported platform")
 
