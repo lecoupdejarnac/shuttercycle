@@ -9,7 +9,8 @@ additional features by Nathan Cormier
 
 $(function() {
 var g_isReady = true;
-var g_isPreviewing = false;
+var g_isMedPreview = false;    // is the medium preview open
+var g_isLargePreview = false;  // is the large preview open
 var g_root = '';
 var g_currentFolder = '';
 var g_showMeta = false;
@@ -107,6 +108,31 @@ var MMG = {
         $('#mmg_preview .preview_outside').click(function() {
             MMG.hidePreview();
         });
+
+        // add keypress handlers
+        $(document).keydown(function(e) {
+            switch(e.which) {
+                case 37: // left
+                    MMG.showPrev();
+                    break;
+
+                case 39: // right
+                    MMG.showNext();
+                    break;
+
+                case 13: // enter
+                    if g_isMedPreview {
+                        MMG.enlargeImage();
+                    }
+                    else if g_isLargePreview {
+                        MMG.hideLarge();
+                    }
+                    break;
+
+                default: return; // exit this handler for other keys
+            }
+            e.preventDefault(); // prevent the default action (scroll / move caret)
+        });
     },
 
     /**
@@ -132,6 +158,9 @@ var MMG = {
     * navigate to next image
     */
     showNext : function() {
+        if !g_isMedPreview {
+            return
+        }
         MMG.data.currentItem = MMG.data.currentItem+1;
         MMG.showItem();
     },
@@ -140,6 +169,9 @@ var MMG = {
     * navigate to prev image
     */
     showPrev : function() {
+        if !g_isMedPreview {
+            return
+        }
         MMG.data.currentItem = MMG.data.currentItem-1;
         MMG.showItem();
     },
@@ -324,8 +356,8 @@ var MMG = {
             g_isReady = true;
             // if the user was navigating through the items
             // show the next one...
-            if (g_isPreviewing) {
-                g_isPreviewing = false;
+            if (g_isMedPreview) {
+                g_isMedPreview = false;
                 MMG.showItem();
             }
         }
@@ -482,7 +514,7 @@ var MMG = {
             }
 
             MMG.more();
-            g_isPreviewing = true;
+            g_isMedPreview = true;
             return;
         }
         $('#mmg_preview_loading').show();
@@ -688,6 +720,7 @@ var MMG = {
                 $(this).empty().append($theImage).fadeIn();
                 imageObj = new Image();
                 imageObj.src = $theImage.attr("src");
+                g_isLargePreview = true;
             })
         })
         .attr('src', MMG.data.largeImage)
@@ -787,6 +820,7 @@ var MMG = {
             'cursor':'auto'
         })
         .unbind('click');
+        g_isLargePreview = false;
     },
 
     /**
