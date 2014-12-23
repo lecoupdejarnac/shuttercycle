@@ -9,12 +9,17 @@ additional features by Nathan Cormier
 
 $(function() {
 var g_isReady = true;
-var g_isMedPreview = false;    // is the medium preview open
-var g_isLargePreview = false;  // is the large preview open
 var g_root = '';
 var g_currentFolder = '';
 var g_showMeta = false;
 var g_share = false;
+
+var AppMode = Object.freeze({
+    GRID: "grid",
+    MED_PREVIEW: "medium preview",
+    LARGE_PREVIEW: "large preview"
+});
+var g_appMode = AppMode.GRID;
 
 var THUMB = 'THMB'
 var MEDIUM = 'MED'
@@ -113,18 +118,22 @@ var MMG = {
         $(document).keydown(function(e) {
             switch(e.which) {
                 case 37: // left
-                    MMG.showPrev();
+                    if (MMG.allowPrev()) {
+                        MMG.showPrev();
+                    }
                     break;
 
                 case 39: // right
-                    MMG.showNext();
+                    if (MMG.allowNext()) {
+                        MMG.showNext();
+                    }
                     break;
 
                 case 13: // enter
-                    if g_isMedPreview {
+                    if (g_appMode == AppMode.MED_PREVIEW) {
                         MMG.enlargeImage();
                     }
-                    else if g_isLargePreview {
+                    else if (g_appMode == AppMode.LARGE_PREVIEW) {
                         MMG.hideLarge();
                     }
                     break;
@@ -158,7 +167,7 @@ var MMG = {
     * navigate to next image
     */
     showNext : function() {
-        if !g_isMedPreview {
+        if (g_appMode != AppMode.MED_PREVIEW) {
             return
         }
         MMG.data.currentItem = MMG.data.currentItem+1;
@@ -169,7 +178,7 @@ var MMG = {
     * navigate to prev image
     */
     showPrev : function() {
-        if !g_isMedPreview {
+        if (g_appMode != AppMode.MED_PREVIEW) {
             return
         }
         MMG.data.currentItem = MMG.data.currentItem-1;
@@ -356,8 +365,8 @@ var MMG = {
             g_isReady = true;
             // if the user was navigating through the items
             // show the next one...
-            if (g_isMedPreview) {
-                g_isMedPreview = false;
+            if (g_appMode == AppMode.MED_PREVIEW) {
+                g_appMode = GRID;
                 MMG.showItem();
             }
         }
@@ -467,6 +476,7 @@ var MMG = {
                 if (g_showMeta)
                     MMG.changeMeta(meta);
                 MMG.resize($theImage);
+                g_appMode = AppMode.MED_PREVIEW;
             })
         }).attr('src', img_source);
 
@@ -479,18 +489,32 @@ var MMG = {
     },
 
     /**
+    * Is there another item to preview before this one?
+    */
+    allowPrev : function() {
+        return MMG.data.currentItem != MMG.data.folders + 1;
+    },
+
+    /**
+    * Is there another item to preview after this one?
+    */
+    allowNext : function() {
+        return MMG.data.currentItem != MMG.data.total;
+    },
+
+    /**
     * display the next/prev item arrows
     */
     toggleNav : function() {
-        if (MMG.data.currentItem == MMG.data.folders + 1)
-            $('#mmg_prev').hide();
-        else
+        if (MMG.allowPrev())
             $('#mmg_prev').show();
-
-        if (MMG.data.currentItem == MMG.data.total)
-            $('#mmg_next').hide();
         else
+            $('#mmg_prev').hide();
+
+        if (MMG.allowNext())
             $('#mmg_next').show();
+        else
+            $('#mmg_next').hide();
     },
 
     /**
@@ -514,7 +538,7 @@ var MMG = {
             }
 
             MMG.more();
-            g_isMedPreview = true;
+            g_appMode = AppMode.MED_PREVIEW;
             return;
         }
         $('#mmg_preview_loading').show();
@@ -682,6 +706,7 @@ var MMG = {
         $preview_wrap.empty();
         $preview_wrap.removeAttr('style');
         MMG.showFolderBack();
+        g_appMode = AppMode.GRID;
     },
 
     /**
@@ -720,7 +745,7 @@ var MMG = {
                 $(this).empty().append($theImage).fadeIn();
                 imageObj = new Image();
                 imageObj.src = $theImage.attr("src");
-                g_isLargePreview = true;
+                g_appMode = AppMode.LARGE_PREVIEW;
             })
         })
         .attr('src', MMG.data.largeImage)
@@ -820,7 +845,7 @@ var MMG = {
             'cursor':'auto'
         })
         .unbind('click');
-        g_isLargePreview = false;
+        g_appMode = AppMode.MED_PREVIEW;
     },
 
     /**
