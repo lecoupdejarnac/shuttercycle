@@ -480,12 +480,24 @@ var MMG = {
             })
         }).attr('src', img_source);
 
-        if (MMG.data.currentItem != MMG.data.total)
+        if (MMG.data.currentItem != MMG.data.total) {
             $photo.css('cursor', 'pointer')
                 .bind('click', function(e) {
                     MMG.showNext();
                     e.preventDefault();
                 });
+        }
+        // add swipe handlers
+        $photo.on("swipeleft", function (e) {
+            if (MMG.allowNext()) {
+                MMG.showNext();
+            }
+        });
+        $photo.on("swiperight", function (e) {
+            if (MMG.allowPrev()) {
+                MMG.showPrev();
+            }
+        });
     },
 
     /**
