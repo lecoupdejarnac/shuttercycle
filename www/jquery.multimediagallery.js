@@ -366,7 +366,7 @@ var MMG = {
             // if the user was navigating through the items
             // show the next one...
             if (g_appMode == AppMode.MED_PREVIEW) {
-                g_appMode = GRID;
+                g_appMode = AppMode.GRID;
                 MMG.showItem();
             }
         }
@@ -459,7 +459,12 @@ var MMG = {
     showImagePreview : function(img_source, description, meta) {
         //XXX get rid of params for this function, instead use globals in MMG.data
         //XXX remove forward-passing of these to other funcs
+        g_appMode = AppMode.MED_PREVIEW;
         var $photo = $('<img id="mmg_medium_photo"/>').load(function() {
+            if (g_appMode != AppMode.MED_PREVIEW) {
+                // if the user has clicked out of this mode before the image loads
+                return;
+            }
             var $theImage = $(this);
             $('#mmg_preview .preview_wrap').fadeOut(100, function() {
                 $('#mmg_preview_loading').hide();
@@ -476,7 +481,6 @@ var MMG = {
                 if (g_showMeta)
                     MMG.changeMeta(meta);
                 MMG.resize($theImage);
-                g_appMode = AppMode.MED_PREVIEW;
             })
         }).attr('src', img_source);
 
@@ -712,13 +716,13 @@ var MMG = {
     * user clicks on the cross to close the item
     */
     hidePreview : function () {
+        g_appMode = AppMode.GRID;
         var $preview_wrap = $('#mmg_preview .preview_wrap');
         $('#mmg_overlay,#mmg_preview,#mmg_description,#mmg_meta').hide();
         $('#mmg_preview .preview_border').hide();
         $preview_wrap.empty();
         $preview_wrap.removeAttr('style');
         MMG.showFolderBack();
-        g_appMode = AppMode.GRID;
     },
 
     /**
@@ -745,7 +749,12 @@ var MMG = {
     enlargeImage: function () {
         var imageObj;
         $('#mmg_preview_loading').show();
+        g_appMode = AppMode.LARGE_PREVIEW;
         $('<img id="mmg_large_photo"/>').load(function() {
+            if (g_appMode != AppMode.LARGE_PREVIEW) {
+                // if the user has clicked out of this mode before the image loads
+                return;
+            }
 
             $('#pageheader,#mmg_preview,#mmg_overlay,' +
               '#mmg_description,#mmg_meta,#mmg_media_wrapper').hide();
@@ -757,7 +766,6 @@ var MMG = {
                 $(this).empty().append($theImage).fadeIn();
                 imageObj = new Image();
                 imageObj.src = $theImage.attr("src");
-                g_appMode = AppMode.LARGE_PREVIEW;
             })
         })
         .attr('src', MMG.data.largeImage)
@@ -847,6 +855,7 @@ var MMG = {
             $('#mmg_meta').show();
 
         var $large_image = $('#mmg_large_photo');
+        g_appMode = AppMode.MED_PREVIEW;
         $large_image.hide();
         $large_image.empty();
         $('#mmg_large').hide();
@@ -857,7 +866,6 @@ var MMG = {
             'cursor':'auto'
         })
         .unbind('click');
-        g_appMode = AppMode.MED_PREVIEW;
     },
 
     /**
