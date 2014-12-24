@@ -104,7 +104,7 @@ var MMG = {
             MMG.more();
             e.preventDefault();
         });
-        $('#mmg_prev_folder .prevfolder').click(function() {
+        $('#mmg_prev_folder').click(function() {
             MMG.backFolder();
         });
         $('#mmg_meta').click(function() {
@@ -347,6 +347,8 @@ var MMG = {
         var elem_meta = elem.meta ? elem.meta : ""
 
         load_state.total_loaded += 1;
+        //XXX change this to a new URL for a med preview
+        //XXX (so back button works: don't break the internet!)
         var $item = $('<a class="'+ elem.type + '" href="#" />');
         //$item.append($('<img alt="' + elem_type + '"/>')
         $item.append($('<img/>')
@@ -377,6 +379,8 @@ var MMG = {
     */
     addFolder : function(elem, load_state, $list) {
         load_state.total_loaded += 1;
+        //XXX change this to a new URL href for the subfolder
+        //XXX (so back button works: don't break the internet!)
         var $item = $('<a class="folder"><div class="name">' + elem.description + '</div></a>');
         $item.hide();
         $item.append($('<img alt="' + elem.type + '"/>')
@@ -419,10 +423,12 @@ var MMG = {
     * shows the button to go back a folder level
     */
     showFolderBack : function() {
+        //XXX one new bug to fix:
+        //XXX  - clicking the 'more' button in a folder shows images from the main gallery!
         if(g_currentFolder != '' && g_currentFolder != g_root)
-            $('#mmg_prev_folder .prevfolder').show();
+            $('#mmg_prev_folder').show();
         else
-            $('#mmg_prev_folder .prevfolder').hide();
+            $('#mmg_prev_folder').hide();
     },
 
     /**
@@ -558,7 +564,7 @@ var MMG = {
             return;
         }
         $('#mmg_preview_loading').show();
-        $('#mmg_prev_folder .prevfolder').hide();
+        $('#mmg_prev_folder').hide();
         /**
         * photo, video or audio
         */

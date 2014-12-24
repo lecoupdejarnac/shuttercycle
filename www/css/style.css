@@ -255,7 +255,7 @@ a.next{
     right:-30px;
     background-image:url(../images/next.png);
 }
-a.prevfolder{
+.prevfolder{
     left:4px;
     background-image:url(../images/prev_folder.png);
     background-color:#000;
@@ -276,7 +276,7 @@ a.prevfolder{
     outline:none;
     display:none;
 }
-a.prevfolder:hover{
+.prevfolder:hover{
     border:1px solid #333;
     opacity:0.9;
 }
