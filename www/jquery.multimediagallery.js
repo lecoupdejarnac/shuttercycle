@@ -38,14 +38,14 @@ var MMG = {
     /**
     * loaded     : how many files were loaded alg_isReady;
     * total      : total number of existing files
-    * set         : number of items to load for each ajax call,
+    * set        : number of items to load for each ajax call,
     * except the first one - it will load as much it fits in the window
     */
     data              : {
         'loaded'                 : 0,
         'total'                  : 0,
         'folders'                : 0,
-        'set'                     : 25
+        'set'                    : 25
     },
 
     /**
@@ -187,7 +187,7 @@ var MMG = {
 
     setRoot : function(folder) {
         g_root = folder + '/';
-        g_currentFolder = g_root;
+        MMG.setCurrentFolder(g_root);
         document.title = 'shuttercycle | ' + folder;
     },
 
@@ -220,14 +220,14 @@ var MMG = {
         }
 
         MMG.getConfig(function(data) {
+            MMG.data.loaded = 0;
+            MMG.data.folders = 0;
             MMG.data.total = 0;
             for (var i = 0; i < data.length; ++i) {
                 if (data[i].hidden !== true) {
                      MMG.data.total++;
                 }
             }
-            MMG.data.loaded = 0;
-            MMG.data.folders = 0;
             // draws the containers where our thumbs will be displayed,
             if (g_isReady) {
                 var nmb_containers = MMG.countSpaces();
@@ -241,7 +241,7 @@ var MMG = {
         * load innitially the number of items that fit
         * on the window + a certain margin.
         * When resizing the window we follow the
-        * same approach. All the other items will load
+        * same approach. All the other items will lead
         * when the User clicks the more button
         */
         var $list = $('#mmg_media_wrapper ul');
@@ -261,7 +261,7 @@ var MMG = {
         var photosPerRow = Math.floor(containerSizeW/188);
         var containerSizeH = $(window).height()-50;
         var photosPerColumn = Math.floor(containerSizeH/148) + 1;
-        var nmb_containers = Math.min(MMG.data.total,photosPerRow * photosPerColumn);
+        var nmb_containers = Math.min(MMG.data.total, photosPerRow * photosPerColumn);
         var nmb_containers_in_viewport = $('#mmg_media_wrapper li:in-viewport').length;
         return nmb_containers-nmb_containers_in_viewport;
     },
@@ -375,6 +375,13 @@ var MMG = {
     },
 
     /**
+    * update the current folder setting
+    */
+    setCurrentFolder : function(target) {
+        g_currentFolder = target;
+    },
+
+    /**
     * add a folder to the grid display
     */
     addFolder : function(elem, load_state, $list) {
@@ -399,8 +406,9 @@ var MMG = {
     * execute when a folder is clicked
     */
     clickFolder : function(folderName) {
-        if (folderName != '')
-            g_currentFolder += folderName + '/';
+        if (folderName != '') {
+            MMG.setCurrentFolder(g_currentFolder + folderName + '/');
+        }
         $('#mmg_media_wrapper ul').empty();
         g_isReady = true;
         MMG.start();
@@ -415,7 +423,7 @@ var MMG = {
         if (lastslash != -1)
             previous = g_currentFolder.substring(0, lastslash);
 
-        g_currentFolder = '';
+        MMG.setCurrentFolder('');
         MMG.clickFolder(previous);
     },
 
