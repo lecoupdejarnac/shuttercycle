@@ -34,6 +34,8 @@ var MAIN = '_main_/';
 var META_MAX_LENGTH = 19;
 var DESC_MAX_LENGTH = 57;
 
+var ENABLE_DEBUG = true;
+
 var MMG = {
     /**
     * loaded     : how many files were loaded alg_isReady;
@@ -48,8 +50,14 @@ var MMG = {
         'set'                    : 25
     },
 
+    debug : function(msg) {
+        if (ENABLE_DEBUG) {
+            console.log(Array.prototype.slice.call(arguments));
+        }
+    },
+
     /**
-    * method called innitially: register events
+    * method called initially: register events
     * and starts the gallery
     */
     init : function () {
@@ -80,37 +88,38 @@ var MMG = {
                     MMG.resize($('#mmg_medium_photo'));
             }
         });
-        $('#mmg_next').live('click', function(e) {
+
+        //
+        // call .off('click') before every bind to prevent multiple bindings of an event
+        //
+
+        $('#mmg_next').off('click').click(function() {
             MMG.showNext();
-            e.preventDefault();
         });
-        $('#mmg_prev').live('click', function(e) {
+        $('#mmg_prev').off('click').click(function() {
             MMG.showPrev();
-            e.preventDefault();
         });
-        $('#mmg_item_close').live('click', function(e) {
+        $('#mmg_item_close').off('click').click(function() {
             MMG.hidePreview();
-            e.preventDefault();
         });
-        $('#mmg_item_enlarge').live('click', function(e) {
+        $('#mmg_item_enlarge').off('click').click(function() {
             MMG.enlargeImage();
-            e.preventDefault();
         });
-        $('#mmg_item_info').live('click', function(e) {
+        $('#mmg_item_info').off('click').click(function() {
             MMG.toggleMeta();
-            e.preventDefault();
         });
-        $('#mmg_more').bind('click', function(e) {
+        $('#mmg_more').off('click').click(function() {
+            MMG.debug("CLICK MORE")
             MMG.more();
-            e.preventDefault();
         });
-        $('#mmg_prev_folder').click(function() {
+        MMG.debug("MORE BOUND")
+        $('#mmg_prev_folder').off('click').click(function() {
             MMG.backFolder();
         });
-        $('#mmg_meta').click(function() {
+        $('#mmg_meta').off('click').click(function() {
             MMG.toggleMeta();
         });
-        $('#mmg_preview .preview_outside').click(function() {
+        $('#mmg_preview .preview_outside').off('click').click(function() {
             MMG.hidePreview();
         });
 
@@ -231,6 +240,7 @@ var MMG = {
             // draws the containers where our thumbs will be displayed,
             if (g_isReady) {
                 var nmb_containers = MMG.countSpaces();
+                MMG.debug("SHOW INITIAL (", nmb_containers, ")");
                 MMG.draw(nmb_containers);
             }
         });
@@ -309,6 +319,11 @@ var MMG = {
         MMG.getConfig(function(data) {
             var load_state = {res_length: nmb_toLoad, total_loaded: 0};
             for (var i = MMG.data.loaded; i < MMG.data.loaded + nmb_toLoad; ++i) {
+                if (i >= data.length) {
+                    MMG.debug("i=", i, " data.length=", data.length, " BREAKING");
+                    break;
+                }
+                //XXX bug here?  sometimes data[i] is out of bounds
                 if (data[i].type == 'folder')
                     MMG.addFolder(data[i], load_state, $list);
                 else
@@ -331,20 +346,30 @@ var MMG = {
     },
 
     getImageDir : function(isFolder) {
-        if (g_share)
-            return IMAGE_ROOT + HIDDEN + g_currentFolder;
-        if (g_currentFolder == '' && !isFolder)
-            return IMAGE_ROOT + GALLERY + MAIN;
+        var imageDir = "";
+        if (g_share) {
+            imageDir = IMAGE_ROOT + HIDDEN + g_currentFolder;
+            MMG.debug("imageDir CASE 1, g_currentFolder=", g_currentFolder);
+        }
+        else if (g_currentFolder == '' && !isFolder) {
+            imageDir = IMAGE_ROOT + GALLERY + MAIN;
+            MMG.debug("imageDir CASE 2, g_currentFolder=", g_currentFolder);
+        }
+        else {
+            imageDir = IMAGE_ROOT + GALLERY + g_currentFolder;
+            MMG.debug("imageDir CASE 3, g_currentFolder=", g_currentFolder);
+        }
 
-        return IMAGE_ROOT + GALLERY + g_currentFolder;
+        MMG.debug("imageDir=", imageDir);
+        return imageDir;
     },
 
     /**
     * add a thumbnailed item to the grid display
     */
     addThumbnail : function(elem, load_state, $list) {
-        var elem_description = elem.description ? elem.description : ""
-        var elem_meta = elem.meta ? elem.meta : ""
+        var elem_description = elem.description ? elem.description : "";
+        var elem_meta = elem.meta ? elem.meta : "";
 
         load_state.total_loaded += 1;
         //XXX change this to a new URL for a med preview
@@ -379,6 +404,7 @@ var MMG = {
     */
     setCurrentFolder : function(target) {
         g_currentFolder = target;
+        MMG.debug("g_currentFolder=", g_currentFolder);
     },
 
     /**
@@ -444,9 +470,9 @@ var MMG = {
     */
     showOptionMore : function() {
         if(MMG.data.loaded == MMG.data.total)
-            $('#mmg_media_wrapper .more').hide();
+            $('#mmg_more').hide();
         else
-            $('#mmg_media_wrapper .more').show();
+            $('#mmg_more').show();
     },
 
     /**
@@ -463,6 +489,7 @@ var MMG = {
         if (g_isReady){
             var nmb_containers = Math.min(MMG.data.total-MMG.data.loaded,
                                                     MMG.data.set)
+            MMG.debug("SHOW MORE (", nmb_containers, ")");
             MMG.draw(nmb_containers);
         }
     },
@@ -567,6 +594,7 @@ var MMG = {
                 return;
             }
 
+            MMG.debug("SHOWITEM calling more()");
             MMG.more();
             g_appMode = AppMode.MED_PREVIEW;
             return;
