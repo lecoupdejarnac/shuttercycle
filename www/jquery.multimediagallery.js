@@ -8,18 +8,12 @@ additional features by Nathan Cormier
 
 
 $(function() {
-var g_isReady = true;
-var g_root = '';
-var g_currentFolder = '';
-var g_showMeta = false;
-var g_share = false;
 
 var AppMode = Object.freeze({
     GRID: "grid",
     MED_PREVIEW: "medium preview",
     LARGE_PREVIEW: "large preview"
 });
-var g_appMode = AppMode.GRID;
 
 var THUMB = 'THMB'
 var MEDIUM = 'MED'
@@ -34,11 +28,19 @@ var MAIN = '_main_/';
 var META_MAX_LENGTH = 19;
 var DESC_MAX_LENGTH = 57;
 
-var ENABLE_DEBUG = true;
+var ENABLE_DEBUG = false;
 
 var MMG = {
+    isReady : true,
+    root : '',
+    currentFolder : '',
+    showMeta : false,
+    isShareURL : false,
+    appMode : AppMode.GRID,
+
+
     /**
-    * loaded     : how many files were loaded alg_isReady;
+    * loaded     : how many files were loaded alMMG.isReady;
     * total      : total number of existing files
     * set        : number of items to load for each ajax call,
     * except the first one - it will load as much it fits in the window
@@ -139,10 +141,10 @@ var MMG = {
                     break;
 
                 case 13: // enter
-                    if (g_appMode == AppMode.MED_PREVIEW) {
+                    if (MMG.appMode == AppMode.MED_PREVIEW) {
                         MMG.enlargeImage();
                     }
-                    else if (g_appMode == AppMode.LARGE_PREVIEW) {
+                    else if (MMG.appMode == AppMode.LARGE_PREVIEW) {
                         MMG.hideLarge();
                     }
                     break;
@@ -176,7 +178,7 @@ var MMG = {
     * navigate to next image
     */
     showNext : function() {
-        if (g_appMode != AppMode.MED_PREVIEW) {
+        if (MMG.appMode != AppMode.MED_PREVIEW) {
             return
         }
         MMG.data.currentItem = MMG.data.currentItem+1;
@@ -187,7 +189,7 @@ var MMG = {
     * navigate to prev image
     */
     showPrev : function() {
-        if (g_appMode != AppMode.MED_PREVIEW) {
+        if (MMG.appMode != AppMode.MED_PREVIEW) {
             return
         }
         MMG.data.currentItem = MMG.data.currentItem-1;
@@ -195,14 +197,14 @@ var MMG = {
     },
 
     setRoot : function(folder) {
-        g_root = folder + '/';
-        MMG.setCurrentFolder(g_root);
+        MMG.root = folder + '/';
+        MMG.setCurrentFolder(MMG.root);
         document.title = 'shuttercycle | ' + folder;
     },
 
     getConfigPath : function() {
-        config_location = g_share ? HIDDEN : GALLERY;
-        return CONFIG_ROOT + config_location + g_currentFolder + CONFIG_FILE;
+        config_location = MMG.isShareURL ? HIDDEN : GALLERY;
+        return CONFIG_ROOT + config_location + MMG.currentFolder + CONFIG_FILE;
     },
 
     getConfig : function(callback) {
@@ -220,12 +222,12 @@ var MMG = {
     start : function() {
         var share = MMG.getUrlVar('share');
         var gallery = MMG.getUrlVar('gallery');
-        if (gallery && gallery != '' && g_root == '') {
+        if (gallery && gallery != '' && MMG.root == '') {
             MMG.setRoot(gallery);
         }
-        else if (share && share != '' && g_root == '') {
+        else if (share && share != '' && MMG.root == '') {
             MMG.setRoot(share);
-            g_share = true;
+            MMG.isShareURL = true;
         }
 
         MMG.getConfig(function(data) {
@@ -238,7 +240,7 @@ var MMG = {
                 }
             }
             // draws the containers where our thumbs will be displayed,
-            if (g_isReady) {
+            if (MMG.isReady) {
                 var nmb_containers = MMG.countSpaces();
                 MMG.debug("SHOW INITIAL (", nmb_containers, ")");
                 MMG.draw(nmb_containers);
@@ -304,7 +306,7 @@ var MMG = {
     * we need to check how many we can display for our window size!
     */
     display : function () {
-        g_isReady = false;
+        MMG.isReady = false;
         if (MMG.data.loaded == MMG.data.total)
             return;
 
@@ -312,7 +314,7 @@ var MMG = {
 
         var nmb_toLoad = $list.find('li:empty').length;
         if (nmb_toLoad == 0) {
-            g_isReady = true;
+            MMG.isReady = true;
             return;
         }
 
@@ -323,7 +325,6 @@ var MMG = {
                     MMG.debug("i=", i, " data.length=", data.length, " BREAKING");
                     break;
                 }
-                //XXX bug here?  sometimes data[i] is out of bounds
                 if (data[i].type == 'folder')
                     MMG.addFolder(data[i], load_state, $list);
                 else
@@ -333,7 +334,7 @@ var MMG = {
             MMG.incrementLoadedFiles(nmb_toLoad);
             MMG.showOptionMore();
             MMG.showFolderBack();
-            g_isReady = true;
+            MMG.isReady = true;
         });
     },
 
@@ -347,17 +348,17 @@ var MMG = {
 
     getImageDir : function(isFolder) {
         var imageDir = "";
-        if (g_share) {
-            imageDir = IMAGE_ROOT + HIDDEN + g_currentFolder;
-            MMG.debug("imageDir CASE 1, g_currentFolder=", g_currentFolder);
+        if (MMG.isShareURL) {
+            imageDir = IMAGE_ROOT + HIDDEN + MMG.currentFolder;
+            MMG.debug("imageDir CASE 1, MMG.currentFolder=", MMG.currentFolder);
         }
-        else if (g_currentFolder == '' && !isFolder) {
+        else if (MMG.currentFolder == '' && !isFolder) {
             imageDir = IMAGE_ROOT + GALLERY + MAIN;
-            MMG.debug("imageDir CASE 2, g_currentFolder=", g_currentFolder);
+            MMG.debug("imageDir CASE 2, MMG.currentFolder=", MMG.currentFolder);
         }
         else {
-            imageDir = IMAGE_ROOT + GALLERY + g_currentFolder;
-            MMG.debug("imageDir CASE 3, g_currentFolder=", g_currentFolder);
+            imageDir = IMAGE_ROOT + GALLERY + MMG.currentFolder;
+            MMG.debug("imageDir CASE 3, MMG.currentFolder=", MMG.currentFolder);
         }
 
         MMG.debug("imageDir=", imageDir);
@@ -389,11 +390,11 @@ var MMG = {
         $list.find('li:empty:first').append($item);
 
         if (load_state.total_loaded == load_state.res_length) {
-            g_isReady = true;
+            MMG.isReady = true;
             // if the user was navigating through the items
             // show the next one...
-            if (g_appMode == AppMode.MED_PREVIEW) {
-                g_appMode = AppMode.GRID;
+            if (MMG.appMode == AppMode.MED_PREVIEW) {
+                MMG.appMode = AppMode.GRID;
                 MMG.showItem();
             }
         }
@@ -403,8 +404,8 @@ var MMG = {
     * update the current folder setting
     */
     setCurrentFolder : function(target) {
-        g_currentFolder = target;
-        MMG.debug("g_currentFolder=", g_currentFolder);
+        MMG.currentFolder = target;
+        MMG.debug("MMG.currentFolder=", MMG.currentFolder);
     },
 
     /**
@@ -433,10 +434,10 @@ var MMG = {
     */
     clickFolder : function(folderName) {
         if (folderName != '') {
-            MMG.setCurrentFolder(g_currentFolder + folderName + '/');
+            MMG.setCurrentFolder(MMG.currentFolder + folderName + '/');
         }
         $('#mmg_media_wrapper ul').empty();
-        g_isReady = true;
+        MMG.isReady = true;
         MMG.start();
     },
 
@@ -444,10 +445,10 @@ var MMG = {
     * execute when the folder back button is clicked
     */
     backFolder : function() {
-        var lastslash = g_currentFolder.lastIndexOf('/', g_currentFolder.length - 2);
+        var lastslash = MMG.currentFolder.lastIndexOf('/', MMG.currentFolder.length - 2);
         var previous = '';
         if (lastslash != -1)
-            previous = g_currentFolder.substring(0, lastslash);
+            previous = MMG.currentFolder.substring(0, lastslash);
 
         MMG.setCurrentFolder('');
         MMG.clickFolder(previous);
@@ -457,9 +458,7 @@ var MMG = {
     * shows the button to go back a folder level
     */
     showFolderBack : function() {
-        //XXX one new bug to fix:
-        //XXX  - clicking the 'more' button in a folder shows images from the main gallery!
-        if(g_currentFolder != '' && g_currentFolder != g_root)
+        if(MMG.currentFolder != '' && MMG.currentFolder != MMG.root)
             $('#mmg_prev_folder').show();
         else
             $('#mmg_prev_folder').hide();
@@ -486,7 +485,7 @@ var MMG = {
     * user clicks on more button
     */
     more : function (){
-        if (g_isReady){
+        if (MMG.isReady){
             var nmb_containers = Math.min(MMG.data.total-MMG.data.loaded,
                                                     MMG.data.set)
             MMG.debug("SHOW MORE (", nmb_containers, ")");
@@ -500,9 +499,9 @@ var MMG = {
     showImagePreview : function(img_source, description, meta) {
         //XXX get rid of params for this function, instead use globals in MMG.data
         //XXX remove forward-passing of these to other funcs
-        g_appMode = AppMode.MED_PREVIEW;
+        MMG.appMode = AppMode.MED_PREVIEW;
         var $photo = $('<img id="mmg_medium_photo"/>').load(function() {
-            if (g_appMode != AppMode.MED_PREVIEW) {
+            if (MMG.appMode != AppMode.MED_PREVIEW) {
                 // if the user has clicked out of this mode before the image loads
                 return;
             }
@@ -519,7 +518,7 @@ var MMG = {
                     append($theImage).fadeIn();
                 MMG.toggleNav();
                 MMG.changeDescription(description);
-                if (g_showMeta)
+                if (MMG.showMeta)
                     MMG.changeMeta(meta);
                 MMG.resize($theImage);
             })
@@ -596,7 +595,7 @@ var MMG = {
 
             MMG.debug("SHOWITEM calling more()");
             MMG.more();
-            g_appMode = AppMode.MED_PREVIEW;
+            MMG.appMode = AppMode.MED_PREVIEW;
             return;
         }
         $('#mmg_preview_loading').show();
@@ -758,7 +757,7 @@ var MMG = {
     * user clicks on the cross to close the item
     */
     hidePreview : function () {
-        g_appMode = AppMode.GRID;
+        MMG.appMode = AppMode.GRID;
         var $preview_wrap = $('#mmg_preview .preview_wrap');
         $('#mmg_overlay,#mmg_preview,#mmg_description,#mmg_meta').hide();
         $('#mmg_preview .preview_border').hide();
@@ -791,9 +790,9 @@ var MMG = {
     enlargeImage: function () {
         var imageObj;
         $('#mmg_preview_loading').show();
-        g_appMode = AppMode.LARGE_PREVIEW;
+        MMG.appMode = AppMode.LARGE_PREVIEW;
         $('<img id="mmg_large_photo"/>').load(function() {
-            if (g_appMode != AppMode.LARGE_PREVIEW) {
+            if (MMG.appMode != AppMode.LARGE_PREVIEW) {
                 // if the user has clicked out of this mode before the image loads
                 return;
             }
@@ -839,7 +838,7 @@ var MMG = {
     * user clicks on the 'i' to show item info (EXIF)
     */
     toggleMeta : function () {
-        if (g_showMeta) {
+        if (MMG.showMeta) {
             $('#mmg_meta').hide();
             $('#mmg_item_info').css({'opacity':'0.5'});
         }
@@ -847,7 +846,7 @@ var MMG = {
             MMG.changeMeta(MMG.data.meta);
         }
 
-        g_showMeta = !g_showMeta;
+        MMG.showMeta = !MMG.showMeta;
     },
 
     /**
@@ -893,11 +892,11 @@ var MMG = {
         $('#pageheader,#mmg_preview,#mmg_overlay,#mmg_media_wrapper').show();
         if (MMG.data.description)
             $('#mmg_description').show();
-        if (g_showMeta)
+        if (MMG.showMeta)
             $('#mmg_meta').show();
 
         var $large_image = $('#mmg_large_photo');
-        g_appMode = AppMode.MED_PREVIEW;
+        MMG.appMode = AppMode.MED_PREVIEW;
         $large_image.hide();
         $large_image.empty();
         $('#mmg_large').hide();
