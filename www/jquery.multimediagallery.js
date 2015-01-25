@@ -31,6 +31,7 @@ var DESC_MAX_LENGTH = 57;
 var ENABLE_DEBUG = false;
 
 var MMG = {
+    isInitialized : false,
     isReady : true,
     root : '',
     currentFolder : '',
@@ -63,8 +64,12 @@ var MMG = {
     * and starts the gallery
     */
     init : function () {
+        if (MMG.isInitialized) {
+            return;
+        }
         MMG.initEventHandlers();
         MMG.start();
+        MMG.isInitialized = true;
     },
 
     /**
@@ -91,37 +96,33 @@ var MMG = {
             }
         });
 
-        //
-        // call .off('click') before every bind to prevent multiple bindings of an event
-        //
-
-        $('#mmg_next').off('click').click(function() {
+        $(document).on('click', '#mmg_next', function() {
             MMG.showNext();
         });
-        $('#mmg_prev').off('click').click(function() {
+        $(document).on('click', '#mmg_prev', function() {
             MMG.showPrev();
         });
-        $('#mmg_item_close').off('click').click(function() {
+        $(document).on('click', '#mmg_item_close', function() {
             MMG.hidePreview();
         });
-        $('#mmg_item_enlarge').off('click').click(function() {
+        $(document).on('click', '#mmg_item_enlarge', function() {
             MMG.enlargeImage();
         });
-        $('#mmg_item_info').off('click').click(function() {
+        $(document).on('click', '#mmg_item_info', function() {
             MMG.toggleMeta();
         });
-        $('#mmg_more').off('click').click(function() {
+        $(document).on('click', '#mmg_more', function() {
             MMG.debug("CLICK MORE")
             MMG.more();
         });
         MMG.debug("MORE BOUND")
-        $('#mmg_prev_folder').off('click').click(function() {
+        $(document).on('click', '#mmg_prev_folder', function() {
             MMG.backFolder();
         });
-        $('#mmg_meta').off('click').click(function() {
+        $(document).on('click', '#mmg_meta', function() {
             MMG.toggleMeta();
         });
-        $('#mmg_preview .preview_outside').off('click').click(function() {
+        $(document).on('click', '#mmg_preview .preview_outside', function() {
             MMG.hidePreview();
         });
 
