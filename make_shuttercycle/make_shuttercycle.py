@@ -195,7 +195,7 @@ def _get_new_size(img, max_extent):
 
 def _create_nonexistent_folder(path, folder):
     if not os.path.isdir(path + folder):
-        os.mkdir(path + folder)
+        os.makedirs(path + folder)
         __debug('created folder %s' % path + folder)
 
 
@@ -270,7 +270,7 @@ def _do_create_sized_images(source_file, current_folder):
     thumb_path = _get_thumb_path(_get_accession(source_file), current_folder)
     scaled_dir = PHOTOS_PATH + current_folder
     if not os.path.isdir(scaled_dir):
-        os.mkdir(scaled_dir)
+        os.makedirs(scaled_dir)
         __debug('created folder %s' % scaled_dir)
     elif os.path.isfile(thumb_path):
         __debug('WARNING: %s will be REPLACED' % (current_folder + source_file))
@@ -410,7 +410,7 @@ def _get_config_file_path(folder):
 def _setup_configs(current_folder, new):
     folder = CONFIG_PATH + current_folder + new
     if not os.path.isdir(folder):
-        os.mkdir(folder)
+        os.makedirs(folder)
         __debug('created folder %s' % folder)
 
     config_file = folder + '/' + CONFIG_FILE
